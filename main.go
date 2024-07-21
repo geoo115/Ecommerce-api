@@ -1,10 +1,9 @@
 package main
 
 import (
-	"github/geoo115/Ecommerce/api"
-	"github/geoo115/Ecommerce/config"
-	"github/geoo115/Ecommerce/db"
-
+	"github.com/geoo115/Ecommerce/api"
+	"github.com/geoo115/Ecommerce/config"
+	"github.com/geoo115/Ecommerce/db"
 	"github.com/gin-gonic/gin"
 )
 

@@ -1,9 +1,11 @@
 package utils
 
 import (
+	"errors"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/geoo115/Ecommerce/models"
 )
 
 var jwtKey = []byte("your_secret_key")
@@ -13,7 +15,7 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
-func GenerateToken(user User) string {
+func GenerateToken(user models.User) string {
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
 		UserID: user.ID,
@@ -30,6 +32,10 @@ func GenerateToken(user User) string {
 func ValidateToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		// Ensure the token's signing method matches what you're using
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
 		return jwtKey, nil
 	})
 
@@ -38,7 +44,7 @@ func ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	if !token.Valid {
-		return nil, err
+		return nil, errors.New("invalid token")
 	}
 
 	return claims, nil
