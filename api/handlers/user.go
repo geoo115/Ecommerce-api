@@ -16,33 +16,44 @@ func Signup(c *gin.Context) {
 		return
 	}
 
-	user.Password = utils.HashPassword(user.Password)
+	// Hash the password before saving
+	hashedPassword, err := utils.HashPassword(user.Password)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		return
+	}
+	user.Password = hashedPassword
+
 	if err := db.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "User created successfully"})
+	c.JSON(http.StatusOK, user)
 }
 
 func Login(c *gin.Context) {
 	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	var dbUser models.User
-	if err := db.DB.Where("username = ?", user.Username).First(&dbUser).Error; err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username or password"})
+	if err := db.DB.Where("username = ?", input.Username).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	if !utils.CheckPasswordHash(user.Password, dbUser.Password) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid username or password"})
+	if !utils.CheckPasswordHash(input.Password, user.Password) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	token := utils.GenerateToken(dbUser)
+	token := utils.GenerateToken(user)
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
