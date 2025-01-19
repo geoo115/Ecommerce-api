@@ -23,11 +23,17 @@ func createDatabaseIfNotExists(dsn string) error {
 		return fmt.Errorf("failed to parse DSN: %w", err)
 	}
 
-	// Remove the dbname from DSN
+	// Extract database name from DSN
+	dbName := u.Path[1:] // Remove leading '/'
+	if dbName == "" {
+		return fmt.Errorf("database name is missing in DSN")
+	}
+
+	// Remove dbname from DSN for the connection
 	q := u.Query()
 	q.Del("dbname")
 	u.RawQuery = q.Encode()
-	u.Path = ""
+	u.Path = "/postgres" // Use the "postgres" system database for initial connection
 
 	// Add sslmode=disable if not present
 	if _, ok := q["sslmode"]; !ok {
@@ -36,9 +42,8 @@ func createDatabaseIfNotExists(dsn string) error {
 	}
 
 	connStr := u.String()
-	dbName := "ecommerce"
 
-	// Connect to PostgreSQL without specifying a database
+	// Connect to PostgreSQL using the "postgres" database
 	conn, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostgreSQL: %w", err)
@@ -55,6 +60,7 @@ func createDatabaseIfNotExists(dsn string) error {
 
 	// Create the database if it does not exist
 	if !exists {
+		log.Printf("Database %s does not exist. Creating it...", dbName)
 		_, err = conn.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
 		if err != nil {
 			return fmt.Errorf("failed to create database: %w", err)
@@ -80,6 +86,18 @@ func ConnectDatabase() {
 	}
 
 	// Auto-migrate the models
-	database.AutoMigrate(&models.User{}, &models.Product{}, &models.Cart{}, &models.Address{})
+	database.AutoMigrate(
+		&models.User{},
+		&models.Category{},
+		&models.Product{},
+		&models.Cart{},
+		&models.Order{},
+		&models.OrderItem{},
+		&models.Payment{},
+		&models.Address{},
+		&models.Review{},
+		&models.Wishlist{},
+		&models.Inventory{},
+	)
 	DB = database
 }

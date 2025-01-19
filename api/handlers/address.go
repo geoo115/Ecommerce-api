@@ -23,6 +23,12 @@ func AddAddress(c *gin.Context) {
 		return
 	}
 
+	// Reload the address with the associated User preloaded
+	if err := db.DB.Preload("User").First(&address, address.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load user data"})
+		return
+	}
+
 	c.JSON(http.StatusOK, address)
 }
 
@@ -44,7 +50,11 @@ func EditAddress(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update address"})
 		return
 	}
-
+	// Reload the address with the associated User preloaded
+	if err := db.DB.Preload("User").First(&address, address.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load user data"})
+		return
+	}
 	c.JSON(http.StatusOK, address)
 }
 

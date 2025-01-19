@@ -37,6 +37,8 @@ func Login(c *gin.Context) {
 	var input struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
+		Email    string `json:"email"`
+		Phone    string `json:"phone"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -56,4 +58,10 @@ func Login(c *gin.Context) {
 
 	token := utils.GenerateToken(user)
 	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+func Logout(c *gin.Context) {
+	// Get the user from the context
+	user, _ := c.Get("user")
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }

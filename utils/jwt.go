@@ -10,7 +10,8 @@ import (
 var jwtKey = []byte("your_secret_key")
 
 type Claims struct {
-	UserID uint `json:"user_id"`
+	UserID uint   `json:"user_id"`
+	Role   string `json:"role"`
 	jwt.StandardClaims
 }
 
@@ -18,6 +19,7 @@ func GenerateToken(user models.User) string {
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
 		UserID: user.ID,
+		Role:   user.Role, // Include the Role field from the user model
 		StandardClaims: jwt.StandardClaims{
 			ExpiresAt: expirationTime.Unix(),
 		},
