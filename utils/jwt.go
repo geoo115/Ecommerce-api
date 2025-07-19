@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -17,16 +18,22 @@ type Claims struct {
 	jwt.StandardClaims
 }
 
-// Get the JWT key from environment variables
-var jwtKey = []byte(getJWTKey())
+// JWT key management with lazy initialization
+var (
+	jwtKey     []byte
+	jwtKeyOnce sync.Once
+)
 
-// Retrieve JWT key from environment variable
-func getJWTKey() string {
-	key := os.Getenv("JWT_SECRET")
-	if key == "" {
-		log.Fatal("JWT_SECRET environment variable is required")
-	}
-	return key
+// getJWTKey retrieves JWT key from environment variable with lazy initialization
+func getJWTKey() []byte {
+	jwtKeyOnce.Do(func() {
+		key := os.Getenv("JWT_SECRET")
+		if key == "" {
+			log.Fatal("JWT_SECRET environment variable is required")
+		}
+		jwtKey = []byte(key)
+	})
+	return jwtKey
 }
 
 // GenerateToken generates a JWT token for a given user
@@ -41,7 +48,7 @@ func GenerateToken(user models.User) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtKey)
+	tokenString, err := token.SignedString(getJWTKey())
 	if err != nil {
 		return "", err
 	}
@@ -53,7 +60,7 @@ func GenerateToken(user models.User) (string, error) {
 func ValidateToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		return jwtKey, nil
+		return getJWTKey(), nil
 	})
 
 	if err != nil {

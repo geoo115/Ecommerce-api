@@ -7,6 +7,9 @@ A robust REST API built with Go and Gin framework for managing an ecommerce plat
 - [Installation](#installation)
 - [Environment Variables](#environment-variables)
 - [Security Features](#security-features)
+- [Monitoring & Health Checks](#monitoring--health-checks)
+- [Rate Limiting](#rate-limiting)
+- [Logging](#logging)
 - [API Documentation](#api-documentation)
   - [Authentication](#authentication)
   - [Categories](#categories)
@@ -18,6 +21,7 @@ A robust REST API built with Go and Gin framework for managing an ecommerce plat
   - [Payments](#payments)
   - [Address](#address)
   - [Admin Reports](#admin-reports)
+  - [Health Checks](#health-checks)
 
 ## Prerequisites
 
@@ -67,6 +71,10 @@ JWT_SECRET=your_super_secret_jwt_key_here_make_it_long_and_random
 
 # Server Configuration
 PORT=8080
+
+# Logging Configuration
+LOG_LEVEL=info
+# Available levels: debug, info, warn, error, fatal
 ```
 
 ## Security Features
@@ -101,6 +109,116 @@ This API includes several security measures:
 - Parameterized queries to prevent SQL injection
 - Proper database connection handling
 - Input validation before database operations
+
+## Monitoring & Health Checks
+
+The API provides comprehensive health check endpoints for monitoring:
+
+### Health Check Endpoints
+
+#### Basic Health Check
+```http
+GET /health
+```
+Returns basic application status.
+
+#### Detailed Health Check
+```http
+GET /health/detailed
+```
+Returns detailed health status including database connectivity and system information.
+
+#### Readiness Check
+```http
+GET /ready
+```
+Checks if the application is ready to serve traffic (database connectivity + startup time).
+
+#### Liveness Check
+```http
+GET /live
+```
+Simple check to verify the application is alive.
+
+#### Metrics
+```http
+GET /metrics
+```
+Returns application metrics including system information and memory usage.
+
+### Health Check Response Format
+```json
+{
+  "success": true,
+  "message": "Health check passed",
+  "data": {
+    "status": "healthy",
+    "timestamp": "2024-01-01T12:00:00Z",
+    "uptime": "1h30m45s",
+    "version": "1.0.0",
+    "services": {
+      "api": {"status": "healthy"},
+      "database": {"status": "healthy"},
+      "system": {
+        "go_version": "go1.22.0",
+        "architecture": "amd64",
+        "os": "linux",
+        "num_cpu": 8,
+        "num_goroutine": 15
+      }
+    }
+  }
+}
+```
+
+## Rate Limiting
+
+The API implements rate limiting to prevent abuse:
+
+### Rate Limit Tiers
+
+- **General API**: 100 requests per minute
+- **Authentication endpoints**: 10 requests per minute (signup/login)
+- **Admin endpoints**: 50 requests per minute
+
+### Rate Limit Headers
+
+When rate limited, the API returns:
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Remaining requests
+- `X-RateLimit-Reset`: Time when limits reset
+
+### Rate Limit Response
+```json
+{
+  "success": false,
+  "error": "Rate limit exceeded. Please try again later.",
+  "code": 429
+}
+```
+
+## Logging
+
+The API includes structured logging with configurable levels:
+
+### Log Levels
+- `debug`: Detailed debug information
+- `info`: General information (default)
+- `warn`: Warning messages
+- `error`: Error messages
+- `fatal`: Fatal errors (exits application)
+
+### Log Format
+```
+[2024-01-01 12:00:00] INFO: HTTP Request: GET /products from 192.168.1.1 - Status: 200 - Duration: 15ms
+```
+
+### Logged Events
+- HTTP requests with timing and status
+- Database operations
+- Security events
+- Application errors
+- System metrics
 
 ## API Documentation and Testing Guide
 
@@ -315,120 +433,40 @@ Test body:
 {
     "product_id": 1,
     "rating": 5,
-    "comment": "Excellent product!"
+    "comment": "Great product!"
 }
 ```
 
-#### List Reviews for Product
+#### List Reviews
 ```http
 GET /reviews/:product_id
 ```
 
-### Wishlist
+### Health Checks
 
-#### View Wishlist
+#### Basic Health Check
 ```http
-GET /wishlist
-Authorization: Bearer <token>
+GET /health
 ```
 
-#### Add to Wishlist
+#### Detailed Health Check
 ```http
-POST /wishlist
-Authorization: Bearer <token>
+GET /health/detailed
 ```
 
-Test body:
-```json
-{
-    "product_id": 1
-}
-```
-
-#### Remove from Wishlist
+#### Readiness Check
 ```http
-DELETE /wishlist/:id
-Authorization: Bearer <token>
+GET /ready
 ```
 
-### Address
-
-#### Add Address
+#### Liveness Check
 ```http
-POST /address
-Authorization: Bearer <token>
+GET /live
 ```
 
-Test body:
-```json
-{
-    "address": "123 Test Street",
-    "city": "Test City",
-    "zip_code": "12345"
-}
-```
-
-#### Edit Address
+#### Metrics
 ```http
-PUT /address/:id
-Authorization: Bearer <token>
-```
-
-Test body:
-```json
-{
-    "address": "456 Updated Street",
-    "city": "New City",
-    "zip_code": "54321"
-}
-```
-
-#### Delete Address
-```http
-DELETE /address/:id
-Authorization: Bearer <token>
-```
-
-### Payments
-
-#### Process Payment
-```http
-POST /payments
-Authorization: Bearer <token>
-```
-
-Test body:
-```json
-{
-    "order_id": 1,
-    "payment_method": "Credit Card",
-    "amount": 999.99
-}
-```
-
-#### Get Payment Status
-```http
-GET /payments/:order_id
-Authorization: Bearer <token>
-```
-
-#### Checkout
-```http
-POST /checkout
-Authorization: Bearer <token>
-```
-
-### Admin Reports
-
-#### Sales Report (Admin Only)
-```http
-GET /admin/reports/sales?start_date=2024-01-01&end_date=2025-01-31
-Authorization: Bearer <token>
-```
-#### Inventory Report (Admin Only)
-```http
-GET /admin/reports/inventory?start_date=2024-01-01&end_date=2025-01-31
-Authorization: Bearer <token>
+GET /metrics
 ```
 
 ## Testing Steps

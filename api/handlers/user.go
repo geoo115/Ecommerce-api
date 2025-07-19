@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/geoo115/Ecommerce/db"
@@ -66,7 +65,7 @@ func Signup(c *gin.Context) {
 		utils.SendConflict(c, "Username or email already in use")
 		return
 	} else if err != gorm.ErrRecordNotFound {
-		log.Printf("Database error during signup: %v", err)
+		utils.AppLogger.LogError(err, "Database error during signup")
 		utils.SendInternalError(c, "Internal server error")
 		return
 	}
@@ -74,7 +73,7 @@ func Signup(c *gin.Context) {
 	// Hash the password
 	hashedPassword, err := utils.HashPassword(user.Password)
 	if err != nil {
-		log.Printf("Error hashing password: %v", err)
+		utils.AppLogger.LogError(err, "Error hashing password")
 		utils.SendInternalError(c, "Failed to process password")
 		return
 	}
@@ -82,10 +81,12 @@ func Signup(c *gin.Context) {
 
 	// Save the user to the database
 	if err := db.DB.Create(&user).Error; err != nil {
-		log.Printf("Error saving user: %v", err)
+		utils.AppLogger.LogError(err, "Error saving user")
 		utils.SendInternalError(c, "Failed to create user")
 		return
 	}
+
+	utils.Info("New user registered: %s", user.Username)
 
 	// Respond with the created user (excluding password)
 	utils.SendSuccess(c, http.StatusCreated, "User created successfully", gin.H{
@@ -123,7 +124,7 @@ func Login(c *gin.Context) {
 		if err == gorm.ErrRecordNotFound {
 			utils.SendUnauthorized(c, "Invalid username or password")
 		} else {
-			log.Printf("Database error during login: %v", err)
+			utils.AppLogger.LogError(err, "Database error during login")
 			utils.SendInternalError(c, "Internal server error")
 		}
 		return
@@ -131,6 +132,7 @@ func Login(c *gin.Context) {
 
 	// Verify password
 	if !utils.CheckPasswordHash(input.Password, user.Password) {
+		utils.AppLogger.LogSecurity("Failed login attempt", c.ClientIP(), "username", input.Username)
 		utils.SendUnauthorized(c, "Invalid username or password")
 		return
 	}
@@ -138,10 +140,12 @@ func Login(c *gin.Context) {
 	// Generate token
 	token, err := utils.GenerateToken(user)
 	if err != nil {
-		log.Printf("Error generating token: %v", err)
+		utils.AppLogger.LogError(err, "Error generating token")
 		utils.SendInternalError(c, "Failed to generate token")
 		return
 	}
+
+	utils.Info("User logged in: %s", user.Username)
 
 	// Respond with token
 	utils.SendSuccess(c, http.StatusOK, "Login successful", gin.H{"token": token})
@@ -157,5 +161,6 @@ func Logout(c *gin.Context) {
 	}
 
 	// Ideally, implement token invalidation here (e.g., store invalidated tokens in a blacklist)
+	utils.Info("User logged out: %v", user)
 	utils.SendSuccess(c, http.StatusOK, "User logged out successfully", gin.H{"user": user})
 }
