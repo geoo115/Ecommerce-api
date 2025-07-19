@@ -2,6 +2,7 @@ package utils
 
 import (
 	"errors"
+	"log"
 	"os"
 	"time"
 
@@ -23,7 +24,7 @@ var jwtKey = []byte(getJWTKey())
 func getJWTKey() string {
 	key := os.Getenv("JWT_SECRET")
 	if key == "" {
-		key = "your_default_secret_key" // Fallback for development
+		log.Fatal("JWT_SECRET environment variable is required")
 	}
 	return key
 }

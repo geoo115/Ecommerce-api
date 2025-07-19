@@ -2,15 +2,17 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/joho/godotenv"
 )
 
-func LoadConfig() {
+func LoadConfig() error {
 	if err := godotenv.Load(); err != nil {
-		panic("Error loading .env file")
+		return fmt.Errorf("error loading .env file: %w", err)
 	}
+	return nil
 }
 
 func GetDatabaseURL() string {
@@ -22,7 +24,7 @@ func GetDatabaseURL() string {
 	sslmode := os.Getenv("DATABASE_SSLMODE")
 
 	if user == "" || password == "" || host == "" || port == "" || name == "" || sslmode == "" {
-		panic("One or more required environment variables are missing")
+		log.Fatal("One or more required environment variables are missing")
 	}
 
 	// Debug print of the final URL

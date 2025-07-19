@@ -17,23 +17,57 @@ func Signup(c *gin.Context) {
 
 	// Validate input
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input format"})
+		utils.SendValidationError(c, "Invalid input format")
 		return
 	}
 
+	// Sanitize input
+	user.Username = utils.SanitizeString(user.Username)
+	user.Email = utils.SanitizeString(user.Email)
+	user.Phone = utils.SanitizeString(user.Phone)
+
 	// Validate required fields
 	if user.Username == "" || user.Password == "" || user.Email == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "All fields are required (username, password, email)"})
+		utils.SendValidationError(c, "All fields are required (username, password, email)")
+		return
+	}
+
+	// Validate input data
+	if !utils.ValidateUsername(user.Username) {
+		utils.SendValidationError(c, "Username must be 3-30 characters long and contain only alphanumeric characters and underscores")
+		return
+	}
+
+	if !utils.ValidateEmail(user.Email) {
+		utils.SendValidationError(c, "Invalid email format")
+		return
+	}
+
+	if !utils.ValidatePassword(user.Password) {
+		utils.SendValidationError(c, "Password must be at least 8 characters long and contain uppercase, lowercase, and numeric characters")
+		return
+	}
+
+	if user.Phone != "" && !utils.ValidatePhone(user.Phone) {
+		utils.SendValidationError(c, "Invalid phone number format")
+		return
+	}
+
+	// Set default role if not provided
+	if user.Role == "" {
+		user.Role = "customer"
+	} else if !utils.ValidateRole(user.Role) {
+		utils.SendValidationError(c, "Invalid role specified")
 		return
 	}
 
 	// Check if the username or email already exists
 	if err := db.DB.Where("username = ? OR email = ?", user.Username, user.Email).First(&models.User{}).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "Username or email already in use"})
+		utils.SendConflict(c, "Username or email already in use")
 		return
 	} else if err != gorm.ErrRecordNotFound {
 		log.Printf("Database error during signup: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+		utils.SendInternalError(c, "Internal server error")
 		return
 	}
 
@@ -41,7 +75,7 @@ func Signup(c *gin.Context) {
 	hashedPassword, err := utils.HashPassword(user.Password)
 	if err != nil {
 		log.Printf("Error hashing password: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process password"})
+		utils.SendInternalError(c, "Failed to process password")
 		return
 	}
 	user.Password = hashedPassword
@@ -49,12 +83,12 @@ func Signup(c *gin.Context) {
 	// Save the user to the database
 	if err := db.DB.Create(&user).Error; err != nil {
 		log.Printf("Error saving user: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		utils.SendInternalError(c, "Failed to create user")
 		return
 	}
 
 	// Respond with the created user (excluding password)
-	c.JSON(http.StatusCreated, gin.H{
+	utils.SendSuccess(c, http.StatusCreated, "User created successfully", gin.H{
 		"id":       user.ID,
 		"username": user.Username,
 		"email":    user.Email,
@@ -71,24 +105,33 @@ func Login(c *gin.Context) {
 
 	// Validate input
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username and password are required"})
+		utils.SendValidationError(c, "Username and password are required")
+		return
+	}
+
+	// Sanitize input
+	input.Username = utils.SanitizeString(input.Username)
+
+	// Validate username
+	if !utils.ValidateUsername(input.Username) {
+		utils.SendValidationError(c, "Invalid username format")
 		return
 	}
 
 	// Check if user exists
 	if err := db.DB.Where("username = ?", input.Username).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+			utils.SendUnauthorized(c, "Invalid username or password")
 		} else {
 			log.Printf("Database error during login: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			utils.SendInternalError(c, "Internal server error")
 		}
 		return
 	}
 
 	// Verify password
 	if !utils.CheckPasswordHash(input.Password, user.Password) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+		utils.SendUnauthorized(c, "Invalid username or password")
 		return
 	}
 
@@ -96,12 +139,12 @@ func Login(c *gin.Context) {
 	token, err := utils.GenerateToken(user)
 	if err != nil {
 		log.Printf("Error generating token: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+		utils.SendInternalError(c, "Failed to generate token")
 		return
 	}
 
 	// Respond with token
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	utils.SendSuccess(c, http.StatusOK, "Login successful", gin.H{"token": token})
 }
 
 // Logout handler
@@ -109,10 +152,10 @@ func Logout(c *gin.Context) {
 	// Retrieve user from the context (set by middleware)
 	user, exists := c.Get("user")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		utils.SendUnauthorized(c, "User not authenticated")
 		return
 	}
 
 	// Ideally, implement token invalidation here (e.g., store invalidated tokens in a blacklist)
-	c.JSON(http.StatusOK, gin.H{"message": "User logged out successfully", "user": user})
+	utils.SendSuccess(c, http.StatusOK, "User logged out successfully", gin.H{"user": user})
 }

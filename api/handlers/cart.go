@@ -6,6 +6,7 @@ import (
 
 	"github.com/geoo115/Ecommerce/db"
 	"github.com/geoo115/Ecommerce/models"
+	"github.com/geoo115/Ecommerce/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,19 +18,25 @@ type AddToCartInput struct {
 func AddToCart(c *gin.Context) {
 	var input AddToCartInput
 	if err := c.ShouldBindJSON(&input); err != nil {
-		errorResponse(c, http.StatusBadRequest, "Invalid input")
+		utils.SendValidationError(c, "Invalid input")
 		return
 	}
 
 	userID, exists := c.Get("userID")
 	if !exists {
-		errorResponse(c, http.StatusUnauthorized, "Unauthorized")
+		utils.SendUnauthorized(c, "Unauthorized")
+		return
+	}
+
+	// Validate quantity
+	if !utils.ValidateQuantity(input.Quantity) {
+		utils.SendValidationError(c, "Quantity must be between 1 and 1000")
 		return
 	}
 
 	// Check stock availability
 	if err := CheckStock(input.ProductID, input.Quantity); err != nil {
-		errorResponse(c, http.StatusBadRequest, err.Error())
+		utils.SendValidationError(c, err.Error())
 		return
 	}
 
@@ -41,7 +48,7 @@ func AddToCart(c *gin.Context) {
 	}
 
 	if err := db.DB.Create(&cartItem).Error; err != nil {
-		errorResponse(c, http.StatusInternalServerError, "Failed to add to cart")
+		utils.SendInternalError(c, "Failed to add to cart")
 		return
 	}
 
@@ -51,15 +58,11 @@ func AddToCart(c *gin.Context) {
 		Preload("Product.Inventory").
 		Preload("User").
 		First(&cartItem, cartItem.ID).Error; err != nil {
-		errorResponse(c, http.StatusInternalServerError, "Failed to fetch cart item details")
+		utils.SendInternalError(c, "Failed to fetch cart item details")
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Item added to cart", "data": cartItem})
-}
-
-func errorResponse(c *gin.Context, status int, message string) {
-	c.JSON(status, gin.H{"error": message})
+	utils.SendSuccess(c, http.StatusCreated, "Item added to cart", cartItem)
 }
 
 func CheckStock(productID uint, quantity int) error {
@@ -77,7 +80,7 @@ func ListCart(c *gin.Context) {
 	var cartItems []models.Cart
 	userID, exists := c.Get("userID")
 	if !exists {
-		errorResponse(c, http.StatusUnauthorized, "Unauthorized")
+		utils.SendUnauthorized(c, "Unauthorized")
 		return
 	}
 
@@ -86,7 +89,7 @@ func ListCart(c *gin.Context) {
 		Preload("Product.Inventory").
 		Preload("User").
 		Find(&cartItems).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list cart items"})
+		utils.SendInternalError(c, "Failed to list cart items")
 		return
 	}
 
@@ -96,7 +99,7 @@ func ListCart(c *gin.Context) {
 		totalAmount += float64(item.Quantity) * item.Product.Price
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	utils.SendSuccess(c, http.StatusOK, "Cart items retrieved successfully", gin.H{
 		"cart_items":   cartItems,
 		"total_amount": totalAmount,
 	})
@@ -106,15 +109,28 @@ func RemoveFromCart(c *gin.Context) {
 	var cartItem models.Cart
 	id := c.Param("id")
 
-	if err := db.DB.Where("id = ?", id).First(&cartItem).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Cart item not found"})
+	// Validate ID parameter
+	if id == "" {
+		utils.SendValidationError(c, "Cart item ID is required")
+		return
+	}
+
+	userID, exists := c.Get("userID")
+	if !exists {
+		utils.SendUnauthorized(c, "Unauthorized")
+		return
+	}
+
+	// Check if cart item exists and belongs to user
+	if err := db.DB.Where("id = ? AND user_id = ?", id, userID).First(&cartItem).Error; err != nil {
+		utils.SendNotFound(c, "Cart item not found")
 		return
 	}
 
 	if err := db.DB.Delete(&cartItem).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to remove from cart"})
+		utils.SendInternalError(c, "Failed to remove from cart")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Cart item removed"})
+	utils.SendSuccess(c, http.StatusOK, "Cart item removed successfully", nil)
 }

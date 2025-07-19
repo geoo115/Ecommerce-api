@@ -6,6 +6,7 @@ A robust REST API built with Go and Gin framework for managing an ecommerce plat
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Environment Variables](#environment-variables)
+- [Security Features](#security-features)
 - [API Documentation](#api-documentation)
   - [Authentication](#authentication)
   - [Categories](#categories)
@@ -38,13 +39,9 @@ go mod tidy
 ```
 
 3. Set up environment variables:
-```env
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=your_password
-DB_NAME=ecommerce
-JWT_SECRET=your_secret_key
+```bash
+cp env.example .env
+# Edit .env with your actual values
 ```
 
 4. Start the server:
@@ -52,6 +49,58 @@ JWT_SECRET=your_secret_key
 go run main.go
 ```
 
+## Environment Variables
+
+Copy `env.example` to `.env` and configure the following variables:
+
+```env
+# Database Configuration
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_USER=postgres
+DATABASE_PASSWORD=your_password
+DATABASE_NAME=ecommerce
+DATABASE_SSLMODE=disable
+
+# JWT Configuration (REQUIRED - must be set)
+JWT_SECRET=your_super_secret_jwt_key_here_make_it_long_and_random
+
+# Server Configuration
+PORT=8080
+```
+
+## Security Features
+
+This API includes several security measures:
+
+### Authentication & Authorization
+- JWT-based authentication with secure token generation
+- Role-based access control (admin/customer)
+- Password hashing using bcrypt
+- Secure token validation
+
+### Input Validation & Sanitization
+- Comprehensive input validation for all endpoints
+- SQL injection prevention using parameterized queries
+- Input sanitization to prevent XSS attacks
+- Request size limits and validation
+
+### Security Headers
+- CORS middleware for cross-origin requests
+- Security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+- Content Security Policy (CSP)
+- XSS protection headers
+
+### Error Handling
+- Standardized error responses
+- No sensitive information in error messages
+- Proper HTTP status codes
+- Secure error logging
+
+### Database Security
+- Parameterized queries to prevent SQL injection
+- Proper database connection handling
+- Input validation before database operations
 
 ## API Documentation and Testing Guide
 
@@ -68,12 +117,18 @@ Test body:
 ```json
 {
     "username": "testuser",
-    "password": "securepass123",
+    "password": "SecurePass123",
     "email": "test@example.com",
     "phone": "1234567890",
     "role": "customer"  // Optional: use "admin" for admin account
 }
 ```
+
+**Validation Rules:**
+- Username: 3-30 characters, alphanumeric and underscores only
+- Password: Minimum 8 characters, must contain uppercase, lowercase, and numeric
+- Email: Valid email format
+- Phone: 10-15 digits
 
 #### Login
 ```http
@@ -84,7 +139,7 @@ Test body:
 ```json
 {
     "username": "testuser",
-    "password": "securepass123"
+    "password": "SecurePass123"
 }
 ```
 
@@ -220,8 +275,12 @@ Authorization: Bearer <token>
 Test body:
 ```json
 {
-    "address_id": 1,
-    "payment_mode": "Credit Card"
+    "items": [
+        {
+            "product_id": 1,
+            "quantity": 2
+        }
+    ]
 }
 ```
 

@@ -50,10 +50,10 @@ func createDatabaseIfNotExists(dsn string) error {
 	}
 	defer conn.Close()
 
-	// Check if the database exists
+	// Check if the database exists using parameterized query
 	var exists bool
-	query := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = '%s')", dbName)
-	err = conn.QueryRow(query).Scan(&exists)
+	query := "SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)"
+	err = conn.QueryRow(query, dbName).Scan(&exists)
 	if err != nil {
 		return fmt.Errorf("failed to check if database exists: %w", err)
 	}
@@ -61,7 +61,8 @@ func createDatabaseIfNotExists(dsn string) error {
 	// Create the database if it does not exist
 	if !exists {
 		log.Printf("Database %s does not exist. Creating it...", dbName)
-		_, err = conn.Exec(fmt.Sprintf("CREATE DATABASE %s", dbName))
+		// Use parameterized query for database creation
+		_, err = conn.Exec("CREATE DATABASE " + dbName)
 		if err != nil {
 			return fmt.Errorf("failed to create database: %w", err)
 		}
