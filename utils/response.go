@@ -1,9 +1,16 @@
 package utils
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+)
+
+// Common error constants
+var (
+	ErrUnauthorized = errors.New("unauthorized")
+	ErrValidation   = errors.New("validation error")
 )
 
 // APIResponse represents a standardized API response structure
