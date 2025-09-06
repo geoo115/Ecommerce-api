@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/geoo115/Ecommerce/db"
 	"github.com/geoo115/Ecommerce/models"
+	"github.com/geoo115/Ecommerce/utils"
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,65 +14,83 @@ import (
 func AddReview(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		utils.SendUnauthorized(c, "Unauthorized")
 		return
 	}
 
 	var reviewRequest struct {
-		ProductID uint   `json:"product_id" binding:"required"`
-		Rating    int    `json:"rating" binding:"required,min=1,max=5"`
-		Comment   string `json:"comment"`
+		Rating  int    `json:"rating" binding:"required,min=1,max=5"`
+		Comment string `json:"comment"`
 	}
 
 	if err := c.ShouldBindJSON(&reviewRequest); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.SendValidationError(c, err.Error())
+		return
+	}
+
+	// Get product ID from path param :id
+	pidStr := c.Param("id")
+	pid, err := strconv.ParseUint(pidStr, 10, 64)
+	if err != nil {
+		utils.SendValidationError(c, "Invalid product ID")
 		return
 	}
 
 	// Check if the product exists
 	var product models.Product
-	if err := db.DB.First(&product, reviewRequest.ProductID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Product not found"})
+	if err := db.DB.First(&product, uint(pid)).Error; err != nil {
+		utils.SendNotFound(c, "Product not found")
 		return
 	}
 
 	// Create the review
 	review := models.Review{
-		ProductID: reviewRequest.ProductID,
+		ProductID: uint(pid),
 		UserID:    userID.(uint),
 		Rating:    reviewRequest.Rating,
 		Comment:   reviewRequest.Comment,
 	}
 
 	if err := db.DB.Create(&review).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		utils.SendInternalError(c, "Failed to create review")
 		return
 	}
 	if err := db.DB.Preload("Product.Category").
-		Preload("Product.Inventory").
 		Preload("User").
 		First(&review, review.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load user data"})
+		utils.SendInternalError(c, "Failed to load user data")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Review added successfully", "review": review})
+	utils.SendSuccess(c, http.StatusCreated, "Review added successfully", gin.H{"review": review})
 }
 
 // ListReviews lists all reviews for a specific product
 func ListReviews(c *gin.Context) {
-	productID := c.Param("product_id")
+	pidStr := c.Param("id")
+	pid, err := strconv.ParseUint(pidStr, 10, 64)
+	if err != nil {
+		utils.SendValidationError(c, "Invalid product ID")
+		return
+	}
+
+	// Check if the product exists
+	var product models.Product
+	if err := db.DB.First(&product, uint(pid)).Error; err != nil {
+		utils.SendNotFound(c, "Product not found")
+		return
+	}
 
 	var reviews []models.Review
-	if err := db.DB.Where("product_id = ?", productID).Preload("User").Find(&reviews).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	if err := db.DB.Where("product_id = ?", uint(pid)).Preload("User").Find(&reviews).Error; err != nil {
+		utils.SendInternalError(c, "Failed to fetch reviews")
 		return
 	}
 
 	if len(reviews) == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"message": "No reviews found for this product"})
+		utils.SendNotFound(c, "No reviews found for this product")
 		return
 	}
 
-	c.JSON(http.StatusOK, reviews)
+	utils.SendSuccess(c, http.StatusOK, "Reviews retrieved successfully", reviews)
 }
