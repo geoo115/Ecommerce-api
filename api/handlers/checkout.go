@@ -1,11 +1,15 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/geoo115/Ecommerce/db"
 	"github.com/geoo115/Ecommerce/models"
+	"github.com/geoo115/Ecommerce/utils"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // ProcessPayment handles payment processing
@@ -17,20 +21,25 @@ func ProcessPayment(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&paymentRequest); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		utils.SendValidationError(c, err.Error())
 		return
 	}
 
 	// Check if the order exists
 	var order models.Order
 	if err := db.DB.First(&order, paymentRequest.OrderID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		// DB closed or other DB error => 500, record not found => 404
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.SendInternalError(c, "Internal server error")
+			return
+		}
+		utils.SendNotFound(c, "Order not found")
 		return
 	}
 
 	// Validate the payment amount
 	if paymentRequest.Amount != order.TotalAmount {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payment amount"})
+		utils.SendValidationError(c, "Invalid payment amount")
 		return
 	}
 
@@ -43,53 +52,58 @@ func ProcessPayment(c *gin.Context) {
 	}
 
 	if err := db.DB.Create(&payment).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to record payment"})
+		utils.SendInternalError(c, "Failed to record payment")
 		return
 	}
 
 	// Update the order status
 	order.Status = "Paid"
 	if err := db.DB.Save(&order).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update order status"})
+		utils.SendInternalError(c, "Failed to update order status")
 		return
 	}
 
 	// Fetch the payment with related order and user details
 	if err := db.DB.Preload("Order.User").First(&payment, payment.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		utils.SendInternalError(c, "Failed to load payment details")
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Payment processed successfully", "payment": payment})
+	utils.SendSuccess(c, http.StatusOK, "Payment processed successfully", gin.H{"payment": payment})
 }
 
 // GetPaymentStatus retrieves the payment status of a specific order
 func GetPaymentStatus(c *gin.Context) {
-	orderID := c.Param("order_id")
+	orderIDStr := c.Param("order_id")
+	orderIDUint64, convErr := strconv.ParseUint(orderIDStr, 10, 64)
+	if convErr != nil {
+		utils.SendNotFound(c, "Payment not found for the given order ID")
+		return
+	}
 
 	var payment models.Payment
-	if err := db.DB.Where("order_id = ?", orderID).First(&payment).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Payment not found for the given order ID"})
+	if err := db.DB.Preload("Order.User").Where("order_id = ?", uint(orderIDUint64)).First(&payment).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.SendNotFound(c, "Payment not found for the given order ID")
+			return
+		}
+		utils.SendInternalError(c, "Internal server error")
 		return
 	}
 
-	// Fetch the payment with related order and user details
-	if err := db.DB.Preload("Order.User").First(&payment, payment.ID).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, payment)
+	utils.SendSuccess(c, http.StatusOK, "Payment status retrieved", gin.H{"payment": payment})
 }
 
 // Checkout processes the checkout by clearing the cart and creating an order
 func Checkout(c *gin.Context) {
 	var cartItems []models.Cart
-	userID, _ := c.Get("userID")
+	uid, err := Base.GetUserID(c)
+	if err != nil {
+		return
+	}
 
 	// Fetch all cart items for the user
-	if err := db.DB.Where("user_id = ?", userID).Preload("Product").Find(&cartItems).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch cart items"})
+	if err := db.DB.Where("user_id = ?", uid).Preload("Product").Find(&cartItems).Error; err != nil {
+		utils.SendInternalError(c, "Failed to fetch cart items")
 		return
 	}
 
@@ -101,7 +115,7 @@ func Checkout(c *gin.Context) {
 
 	// Create a new order
 	order := models.Order{
-		UserID:      userID.(uint),
+		UserID:      uid,
 		TotalAmount: totalAmount,
 		Status:      "Pending",
 		Items:       []models.OrderItem{},
@@ -116,15 +130,23 @@ func Checkout(c *gin.Context) {
 	}
 
 	if err := db.DB.Create(&order).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create order"})
+		utils.SendInternalError(c, "Failed to create order")
 		return
+	}
+
+	// Decrement inventory for purchased items (best-effort)
+	for _, item := range cartItems {
+		var inv models.Inventory
+		if err := db.DB.Where("product_id = ?", item.ProductID).First(&inv).Error; err == nil {
+			inv.Stock = inv.Stock - item.Quantity
+			db.DB.Save(&inv)
+		}
 	}
 
 	// Clear the user's cart
-	if err := db.DB.Where("user_id = ?", userID).Delete(&models.Cart{}).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to clear cart"})
+	if err := db.DB.Where("user_id = ?", uid).Delete(&models.Cart{}).Error; err != nil {
+		utils.SendInternalError(c, "Failed to clear cart")
 		return
 	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Checkout successful", "order": order})
+	utils.SendSuccess(c, http.StatusOK, "Checkout successful", gin.H{"order": order})
 }
