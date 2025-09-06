@@ -51,6 +51,10 @@ func SalesReport(c *gin.Context) {
 		periodStr = fmt.Sprintf("%s to %s", startDate, endDate)
 	}
 
+	if db.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate sales report: database not available"})
+		return
+	}
 	// Build the query with fixed period
 	query := db.DB.Model(&models.OrderItem{}).
 		Select(`
@@ -89,7 +93,9 @@ func SalesReport(c *gin.Context) {
 	// Add period information to response
 	response := gin.H{
 		"sales_report": report,
-		"summary":      totalSummary,
+		// some tests expect 'report' key
+		"report":  report,
+		"summary": totalSummary,
 		"filters": gin.H{
 			"start_date": startDate,
 			"end_date":   endDate,
@@ -135,6 +141,10 @@ func InventoryReport(c *gin.Context) {
 		Category     string    `json:"category"`
 	}
 
+	if db.DB == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate inventory report: database not available"})
+		return
+	}
 	// Updated query to use inventories table
 	query := db.DB.Model(&models.Product{}).
 		Select(`
@@ -172,6 +182,8 @@ func InventoryReport(c *gin.Context) {
 	// Add period information and summary to response
 	response := gin.H{
 		"inventory_report": report,
+		// some tests expect 'inventory' key
+		"inventory": report,
 		"summary": gin.H{
 			"total_items": totalItems,
 			"total_value": totalValue,
