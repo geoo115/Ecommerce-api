@@ -62,7 +62,7 @@ func Signup(c *gin.Context) {
 
 	// Check if the username or email already exists
 	if err := db.DB.Where("username = ? OR email = ?", user.Username, user.Email).First(&models.User{}).Error; err == nil {
-		utils.SendConflict(c, "Username or email already in use")
+		utils.SendConflict(c, "User already exists")
 		return
 	} else if err != gorm.ErrRecordNotFound {
 		utils.AppLogger.LogError(err, "Database error during signup")
@@ -104,6 +104,15 @@ func Login(c *gin.Context) {
 	}
 	var user models.User
 
+	// Check database connection
+	if db.DB == nil {
+		if utils.AppLogger != nil {
+			utils.AppLogger.LogError(nil, "Database connection is nil")
+		}
+		utils.SendInternalError(c, "Database error")
+		return
+	}
+
 	// Validate input
 	if err := c.ShouldBindJSON(&input); err != nil {
 		utils.SendValidationError(c, "Username and password are required")
@@ -120,11 +129,20 @@ func Login(c *gin.Context) {
 	}
 
 	// Check if user exists
+	if db.DB == nil {
+		if utils.AppLogger != nil {
+			utils.AppLogger.LogError(nil, "Database connection is nil")
+		}
+		utils.SendInternalError(c, "Database error")
+		return
+	}
 	if err := db.DB.Where("username = ?", input.Username).First(&user).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			utils.SendUnauthorized(c, "Invalid username or password")
+			utils.SendUnauthorized(c, "Invalid credentials")
 		} else {
-			utils.AppLogger.LogError(err, "Database error during login")
+			if utils.AppLogger != nil {
+				utils.AppLogger.LogError(err, "Database error during login")
+			}
 			utils.SendInternalError(c, "Internal server error")
 		}
 		return
@@ -132,15 +150,19 @@ func Login(c *gin.Context) {
 
 	// Verify password
 	if !utils.CheckPasswordHash(input.Password, user.Password) {
-		utils.AppLogger.LogSecurity("Failed login attempt", c.ClientIP(), "username", input.Username)
-		utils.SendUnauthorized(c, "Invalid username or password")
+		if utils.AppLogger != nil {
+			utils.AppLogger.LogSecurity("Failed login attempt", c.ClientIP(), "username", input.Username)
+		}
+		utils.SendUnauthorized(c, "Invalid credentials")
 		return
 	}
 
 	// Generate token
 	token, err := utils.GenerateToken(user)
 	if err != nil {
-		utils.AppLogger.LogError(err, "Error generating token")
+		if utils.AppLogger != nil {
+			utils.AppLogger.LogError(err, "Error generating token")
+		}
 		utils.SendInternalError(c, "Failed to generate token")
 		return
 	}
