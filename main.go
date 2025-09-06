@@ -40,7 +40,9 @@ func main() {
 
 	// Initialize database
 	utils.Info("Connecting to database...")
-	db.ConnectDatabase()
+	if err := db.ConnectDatabase(); err != nil {
+		utils.Fatal("Failed to connect to database: %v", err)
+	}
 	utils.Info("Database connected successfully")
 
 	// Set up routes
