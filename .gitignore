@@ -1,0 +1,28 @@
+# Go
+*.exe
+*.dll
+*.so
+*.test
+*.env
+
+# Node
+node_modules/
+
+# Load test artifacts
+load_test_logs/
+load_test_reports/
+k6*.log
+
+# Coverage and generated reports
+coverage.out
+coverage.html
+*.prof
+*.pprof
+
+# Test DBs
+api/handlers/test_*.db
+
+# Misc
+*.log
+*.out
+*.tmp
