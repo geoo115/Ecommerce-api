@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/joho/godotenv"
@@ -15,7 +14,13 @@ func LoadConfig() error {
 	return nil
 }
 
-func GetDatabaseURL() string {
+func GetDatabaseURL() (string, error) {
+	// Highest precedence: full DATABASE_URL if provided
+	if full := os.Getenv("DATABASE_URL"); full != "" {
+		return full, nil
+	}
+
+	// Otherwise build from individual pieces, with sensible defaults
 	user := os.Getenv("DATABASE_USER")
 	password := os.Getenv("DATABASE_PASSWORD")
 	host := os.Getenv("DATABASE_HOST")
@@ -23,14 +28,19 @@ func GetDatabaseURL() string {
 	name := os.Getenv("DATABASE_NAME")
 	sslmode := os.Getenv("DATABASE_SSLMODE")
 
-	if user == "" || password == "" || host == "" || port == "" || name == "" || sslmode == "" {
-		log.Fatal("One or more required environment variables are missing")
+	if port == "" {
+		port = "5432"
+	}
+	if sslmode == "" {
+		sslmode = "disable"
 	}
 
-	// Debug print of the final URL
+	// Require core fields
+	if user == "" || password == "" || host == "" || name == "" {
+		return "", fmt.Errorf("one or more required environment variables are missing")
+	}
+
 	databaseURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		user, password, host, port, name, sslmode)
-	fmt.Println("Database URL:", databaseURL) // Debug output
-
-	return databaseURL
+	return databaseURL, nil
 }
