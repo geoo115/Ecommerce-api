@@ -179,5 +179,5 @@ func CancelOrder(c *gin.Context) {
 		}
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Order canceled successfully", nil)
+	utils.SendSuccess(c, http.StatusOK, "Order cancelled successfully", nil)
 }
