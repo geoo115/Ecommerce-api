@@ -1,0 +1,63 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run All Tests with Coverage",
+			"type": "shell",
+			"command": "go test -coverprofile=coverage.out ./...",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run Tests with Coverage Limited Output",
+			"type": "shell",
+			"command": "go test -coverprofile=coverage.out ./... | head -50",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run Handlers Tests and Show Failures",
+			"type": "shell",
+			"command": "go test ./api/handlers -v | grep FAIL",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run Specific Test",
+			"type": "shell",
+			"command": "go test ./api/handlers",
+			"args": [
+				"-run",
+				"TestCategories_ListAddDelete",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run handlers tests with timestamped output",
+			"type": "shell",
+			"command": "go test ./api/handlers -v | ts -s '%Y-%m-%d %H:%M:%S'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run tests with coverage",
+			"type": "shell",
+			"command": "go test -coverprofile=coverage.out ./... -timeout=60s",
+			"isBackground": false,
+			"problemMatcher": [
+				"$go"
+			],
+			"group": "test"
+		}
+	]
+}
