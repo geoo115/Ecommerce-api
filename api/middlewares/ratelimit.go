@@ -1,6 +1,7 @@
 package middlewares
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -84,12 +85,12 @@ func (rl *RateLimiter) cleanup() {
 
 // Global rate limiter instances
 var (
-	// General API rate limiter: 100 requests per minute
-	generalLimiter = NewRateLimiter(100, time.Minute)
-	// Auth endpoints rate limiter: 10 requests per minute
-	authLimiter = NewRateLimiter(10, time.Minute)
-	// Admin endpoints rate limiter: 50 requests per minute
-	adminLimiter = NewRateLimiter(50, time.Minute)
+	// General API rate limiter: 10000 requests per minute (for load testing)
+	generalLimiter = NewRateLimiter(10000, time.Minute)
+	// Auth endpoints rate limiter: 1000 requests per minute
+	authLimiter = NewRateLimiter(1000, time.Minute)
+	// Admin endpoints rate limiter: 5000 requests per minute
+	adminLimiter = NewRateLimiter(5000, time.Minute)
 )
 
 // startCleanup starts a background goroutine to clean up old rate limiter entries
@@ -112,7 +113,7 @@ func RateLimitMiddleware(limiter *RateLimiter) gin.HandlerFunc {
 		clientIP := c.ClientIP()
 
 		if !limiter.isAllowed(clientIP) {
-			c.Header("X-RateLimit-Limit", "100")
+			c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", limiter.limit))
 			c.Header("X-RateLimit-Remaining", "0")
 			c.Header("X-RateLimit-Reset", time.Now().Add(time.Minute).Format(time.RFC3339))
 			c.JSON(http.StatusTooManyRequests, gin.H{
