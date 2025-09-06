@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"strings"
 
 	"github.com/geoo115/Ecommerce/config"
 	"github.com/geoo115/Ecommerce/models"
 	"gorm.io/driver/postgres"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
 	_ "github.com/lib/pq"
@@ -21,6 +23,11 @@ func createDatabaseIfNotExists(dsn string) error {
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return fmt.Errorf("failed to parse DSN: %w", err)
+	}
+
+	// Basic validation for parsed DSN
+	if u.Host == "" || u.Path == "" {
+		return fmt.Errorf("invalid DSN: missing host or path")
 	}
 
 	// Extract database name from DSN
@@ -71,23 +78,37 @@ func createDatabaseIfNotExists(dsn string) error {
 	return nil
 }
 
-func ConnectDatabase() {
-	dsn := config.GetDatabaseURL()
-
-	// Attempt to create the database if it doesn't exist
-	err := createDatabaseIfNotExists(dsn)
+// ConnectDatabase connects to the configured database. It returns an error
+// instead of exiting the program so callers (and tests) can handle failures.
+func ConnectDatabase() error {
+	dsn, err := config.GetDatabaseURL()
 	if err != nil {
-		log.Fatal("Failed to ensure database exists:", err)
+		return fmt.Errorf("failed to get database URL: %w", err)
 	}
 
-	// Connect to the specified database
-	database, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	// If the DSN looks like Postgres, attempt to ensure database exists
+	if strings.HasPrefix(dsn, "postgres://") || strings.Contains(dsn, "host=") {
+		if err := createDatabaseIfNotExists(dsn); err != nil {
+			return fmt.Errorf("failed to ensure database exists: %w", err)
+		}
+	}
+
+	// Choose driver based on DSN heuristics (postgres vs sqlite)
+	var dialector gorm.Dialector
+	if strings.HasPrefix(dsn, "postgres://") || strings.Contains(dsn, "host=") {
+		dialector = postgres.Open(dsn)
+	} else {
+		// Treat non-postgres DSNs as sqlite paths (file: or memory)
+		dialector = sqlite.Open(dsn)
+	}
+
+	database, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
 	// Auto-migrate the models
-	database.AutoMigrate(
+	if err := database.AutoMigrate(
 		&models.User{},
 		&models.Category{},
 		&models.Product{},
@@ -99,6 +120,11 @@ func ConnectDatabase() {
 		&models.Review{},
 		&models.Wishlist{},
 		&models.Inventory{},
-	)
+	); err != nil {
+		// AutoMigrate failing is not fatal for tests, but log it
+		log.Printf("auto migrate failed: %v", err)
+	}
+
 	DB = database
+	return nil
 }
