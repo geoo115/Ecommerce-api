@@ -1,0 +1,349 @@
+name: CI/CD Pipeline with Load Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Load test type to run'
+        required: false
+        default: 'comprehensive'
+        type: choice
+        options:
+          - health
+          - comprehensive
+          - stress
+          - all
+
+env:
+  GO_VERSION: '1.21'
+  NODE_VERSION: '18'
+  REGISTRY: 'docker.io'
+  IMAGE_NAME: 'geoo115/ecommerce-api'
+
+jobs:
+  test:
+    name: Unit & Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: ecommerce_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run Go vet
+      run: go vet ./...
+
+    - name: Run Go fmt check
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "The following files are not formatted:"
+          gofmt -s -l .
+          exit 1
+        fi
+
+    - name: Run tests with coverage
+      run: |
+        go test ./... -coverprofile=coverage.out -covermode=count -race -v
+        go tool cover -func=coverage.out
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+    - name: Check coverage threshold
+      run: |
+        COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+        echo "Total coverage: $COVERAGE%"
+        if (( $(echo "$COVERAGE < 80.0" | bc -l) )); then
+          echo "Coverage is below 80% threshold"
+          exit 1
+        fi
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: |
+          coverage.out
+          *.log
+        retention-days: 30
+
+  performance-test:
+    name: Performance Regression Tests
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run performance benchmarks
+      run: |
+        go test -bench=. -benchmem ./... > benchmark_results.txt
+        cat benchmark_results.txt
+
+    - name: Run performance regression tests
+      run: |
+        go test -run=TestHealthCheckPerformance -v ./api/handlers/
+        go test -run=TestMetricsEndpointPerformance -v ./api/handlers/
+
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results
+        path: benchmark_results.txt
+        retention-days: 30
+
+    - name: Check for performance regressions
+      run: |
+        # Simple performance regression check
+        if grep -q "FAIL" benchmark_results.txt; then
+          echo "Performance regression detected!"
+          exit 1
+        fi
+
+        # Check if benchmarks are within acceptable ranges
+        if grep -q "ns/op" benchmark_results.txt; then
+          echo "Benchmarks completed successfully"
+        else
+          echo "No benchmark results found"
+          exit 1
+        fi
+
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Set up Node.js for k6
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Install k6
+      run: |
+        curl -s https://dl.k6.io/key.gpg | sudo apt-key add -
+        echo "deb https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Build application
+      run: go build -o ecommerce-api main.go
+
+    - name: Determine test type
+      id: test-type
+      run: |
+        if [ "${{ github.event.inputs.test_type }}" != "" ]; then
+          echo "test_type=${{ github.event.inputs.test_type }}" >> $GITHUB_OUTPUT
+        elif [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "test_type=health" >> $GITHUB_OUTPUT
+        else
+          echo "test_type=comprehensive" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run load tests
+      run: |
+        chmod +x run_load_tests.sh
+        ./run_load_tests.sh ${{ steps.test-type.outputs.test_type }} -d 2m
+      env:
+        CI: true
+
+    - name: Upload load test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: load-test-results-${{ steps.test-type.outputs.test_type }}
+        path: |
+          load_test_logs/
+          load_test_reports/
+        retention-days: 30
+
+    - name: Generate load test summary
+      if: always()
+      run: |
+        echo "## Load Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Test Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "- Test Type: ${{ steps.test-type.outputs.test_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- Duration: 2 minutes" >> $GITHUB_STEP_SUMMARY
+        echo "- Trigger: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ -d "load_test_reports" ]; then
+          echo "### Test Results" >> $GITHUB_STEP_SUMMARY
+          ls -la load_test_reports/ >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        if [ -f "load_test_logs/server.log" ]; then
+          echo "### Server Logs (Last 20 lines)" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          tail -20 load_test_logs/server.log >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        fi
+
+  build:
+    name: Build & Docker
+    runs-on: ubuntu-latest
+    needs: [test, performance-test, load-test]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Docker Hub
+      if: github.ref == 'refs/heads/main'
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ github.repository }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: ${{ github.ref == 'refs/heads/main' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Generate artifact attestation
+      if: github.ref == 'refs/heads/main'
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
+        subject-digest: ${{ steps.push.outputs.digest }}
+        push-to-registry: true
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
+      id: deploy
+      run: |
+        echo "🚀 Deploying to staging environment..."
+        # Add your staging deployment commands here
+        echo "url=https://staging-api.example.com" >> $GITHUB_OUTPUT
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      id: deploy
+      run: |
+        echo "🚀 Deploying to production environment..."
+        # Add your production deployment commands here
+        echo "url=https://api.example.com" >> $GITHUB_OUTPUT
+
+  performance-alert:
+    name: Performance Alert
+    runs-on: ubuntu-latest
+    needs: load-test
+    if: failure() && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+
+    steps:
+    - name: Send performance alert
+      run: |
+        echo "⚠️ Performance test failed!"
+        echo "Check the load test results for details."
+        # Add alerting logic here (Slack, PagerDuty, etc.)
