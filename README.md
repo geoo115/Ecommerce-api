@@ -1,7 +1,7 @@
 # 🛒 Ecommerce API
 
 [![Go Version](https://img.shields.io/badge/Go-1.22+-blue.svg)](https://golang.org)
-[![Test Coverage](https://img.shields.io/badge/Coverage-73.4%25-green.svg)](https://github.com/geoo115/Ecommerce-api)
+[![Test Coverage](https://img.shields.io/badge/Coverage-71.9%25-green.svg)](https://github.com/geoo115/Ecommerce-api)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/Build-Passing-green.svg)](https://github.com/geoo115/Ecommerce-api)
 
