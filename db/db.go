@@ -6,12 +6,14 @@ import (
 	"log"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/geoo115/Ecommerce/config"
 	"github.com/geoo115/Ecommerce/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	_ "github.com/lib/pq"
 )
@@ -128,9 +130,73 @@ func ConnectDatabase() error {
 	}
 
 	log.Printf("Opening database connection...")
-	database, err := gorm.Open(dialector, &gorm.Config{})
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
+
+	// Configure GORM with connection timeout and retry settings
+	gormConfig := &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Warn), // Reduce log noise
+		NowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
+	}
+
+	// Add connection timeout for PostgreSQL
+	if strings.HasPrefix(dsn, "postgres://") || strings.Contains(dsn, "host=") {
+		// Parse the DSN and add timeout parameters if not already present
+		if !strings.Contains(dsn, "connect_timeout=") {
+			separator := "?"
+			if strings.Contains(dsn, "?") {
+				separator = "&"
+			}
+			dsn += separator + "connect_timeout=10"
+		}
+		if !strings.Contains(dsn, "statement_timeout=") {
+			dsn += "&statement_timeout=30000" // 30 seconds
+		}
+		dialector = postgres.Open(dsn)
+	}
+
+	// Retry connection with exponential backoff
+	var database *gorm.DB
+	maxRetries := 5
+	baseDelay := 2 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		log.Printf("Database connection attempt %d/%d...", attempt, maxRetries)
+
+		database, err = gorm.Open(dialector, gormConfig)
+		if err == nil {
+			// Test the connection
+			sqlDB, sqlErr := database.DB()
+			if sqlErr == nil {
+				if pingErr := sqlDB.Ping(); pingErr == nil {
+					log.Printf("Database connection successful after %d attempt(s)", attempt)
+					break
+				} else {
+					err = pingErr
+				}
+			} else {
+				err = sqlErr
+			}
+		}
+
+		if attempt < maxRetries {
+			delay := time.Duration(attempt) * baseDelay
+			log.Printf("Connection failed (attempt %d/%d): %v. Retrying in %v...", attempt, maxRetries, err, delay)
+			time.Sleep(delay)
+		} else {
+			return fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
+		}
+	}
+
+	// Configure connection pool for better reliability
+	sqlDB, err := database.DB()
+	if err == nil {
+		// Set connection pool settings for production
+		sqlDB.SetMaxIdleConns(10)
+		sqlDB.SetMaxOpenConns(100)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+		sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+		log.Printf("Connection pool configured successfully")
 	}
 
 	log.Printf("Database connection successful, running auto-migration...")
