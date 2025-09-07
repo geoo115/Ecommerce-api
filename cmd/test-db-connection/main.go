@@ -15,7 +15,7 @@ import (
 
 func main() {
 	log.Println("=== Database Connection Test ===")
-	
+
 	// Load config
 	if err := config.LoadConfig(); err != nil {
 		log.Printf("Config load error (non-fatal): %v", err)
@@ -46,7 +46,7 @@ func main() {
 
 	// Test connection with timeout
 	log.Println("Testing database connection...")
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -78,7 +78,7 @@ func main() {
 
 	// Test database stats
 	stats := sqlDB.Stats()
-	log.Printf("Connection stats: OpenConnections=%d, InUse=%d, Idle=%d", 
+	log.Printf("Connection stats: OpenConnections=%d, InUse=%d, Idle=%d",
 		stats.OpenConnections, stats.InUse, stats.Idle)
 }
 
