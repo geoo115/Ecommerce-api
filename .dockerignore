@@ -1,0 +1,68 @@
+# Git
+.git
+.gitignore
+README.md
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose*.yml
+
+# CI/CD
+.github/
+.vscode/
+
+# Dependencies
+node_modules/
+
+# Testing
+coverage.out
+*.test
+*_test.go
+test_*.go
+**/testdata/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+bin/
+dist/
+build/
+
+# Temporary files
+tmp/
+temp/
+uploads/
+
+# Coverage
+coverage.html
+coverage.xml
+
+# Benchmarks
+benchmark_results.txt
+
+# Postman collections (optional)
+postman/

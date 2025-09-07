@@ -1281,6 +1281,451 @@ GET /metrics
 - Test authorization with insufficient permissions
 - Test rate limiting by making excessive requests
 
+## 🚨 Error Responses & Examples
+
+The API provides standardized error responses with consistent structure and meaningful HTTP status codes.
+
+### Error Response Format
+
+All error responses follow this structure:
+```json
+{
+  "success": false,
+  "error": "Error message description",
+  "code": 400
+}
+```
+
+### Common Error Scenarios
+
+#### 400 Bad Request - Validation Errors
+```json
+// Missing required fields
+{
+  "success": false,
+  "error": "Username and password are required",
+  "code": 400
+}
+
+// Invalid input format
+{
+  "success": false,
+  "error": "Invalid email format",
+  "code": 400
+}
+
+// Business logic validation
+{
+  "success": false,
+  "error": "Price must be greater than 0 and less than 999999.99",
+  "code": 400
+}
+```
+
+#### 401 Unauthorized - Authentication Errors
+```json
+// Missing authorization header
+{
+  "success": false,
+  "error": "Authorization header is required",
+  "code": 401
+}
+
+// Invalid or expired token
+{
+  "success": false,
+  "error": "Invalid token",
+  "code": 401
+}
+
+// Wrong credentials
+{
+  "success": false,
+  "error": "Invalid username or password",
+  "code": 401
+}
+```
+
+#### 403 Forbidden - Authorization Errors
+```json
+// Insufficient permissions
+{
+  "success": false,
+  "error": "Admin access required",
+  "code": 403
+}
+
+// Resource access denied
+{
+  "success": false,
+  "error": "Access denied to this resource",
+  "code": 403
+}
+```
+
+#### 404 Not Found - Resource Errors
+```json
+// Resource doesn't exist
+{
+  "success": false,
+  "error": "Product not found",
+  "code": 404
+}
+
+// Endpoint doesn't exist
+{
+  "success": false,
+  "error": "Endpoint not found",
+  "code": 404
+}
+```
+
+#### 409 Conflict - Duplicate Resources
+```json
+// Duplicate registration
+{
+  "success": false,
+  "error": "Username already exists",
+  "code": 409
+}
+
+// Business logic conflict
+{
+  "success": false,
+  "error": "Product already in cart",
+  "code": 409
+}
+```
+
+#### 429 Too Many Requests - Rate Limiting
+```json
+{
+  "success": false,
+  "error": "Rate limit exceeded. Please try again later.",
+  "code": 429
+}
+```
+
+#### 500 Internal Server Error - System Errors
+```json
+// Generic server error (details logged internally)
+{
+  "success": false,
+  "error": "Internal server error",
+  "code": 500
+}
+
+// Database connection issues
+{
+  "success": false,
+  "error": "Database temporarily unavailable",
+  "code": 500
+}
+```
+
+### Edge Case Examples
+
+#### Invalid JSON Payload
+```bash
+curl -X POST http://localhost:8080/signup \
+  -H "Content-Type: application/json" \
+  -d '{"username": "test", "password": "weak"'  # Invalid JSON
+```
+```json
+{
+  "success": false,
+  "error": "Invalid request payload",
+  "code": 400
+}
+```
+
+#### SQL Injection Attempt
+```bash
+curl -X GET "http://localhost:8080/product/1'; DROP TABLE products; --"
+```
+```json
+{
+  "success": false,
+  "error": "Invalid product ID format",
+  "code": 400
+}
+```
+
+#### XSS Attempt in Product Name
+```json
+// POST /product with malicious payload
+{
+  "name": "<script>alert('xss')</script>",
+  "price": 99.99,
+  "category_id": 1
+}
+```
+```json
+{
+  "success": false,
+  "error": "Product name contains invalid characters",
+  "code": 400
+}
+```
+
+## 🛠️ Troubleshooting
+
+### Common Setup Issues
+
+#### Database Connection Problems
+```bash
+# Symptoms
+Database connection error on startup
+Health check fails with database error
+
+# Solutions
+1. Verify PostgreSQL is running:
+   sudo systemctl status postgresql
+
+2. Check database credentials in .env:
+   DATABASE_HOST=localhost
+   DATABASE_PORT=5432
+   DATABASE_USER=ecommerce_user
+   DATABASE_PASSWORD=your_password
+   DATABASE_NAME=ecommerce
+
+3. Test database connection:
+   psql -h localhost -p 5432 -U ecommerce_user -d ecommerce
+
+4. Check firewall/network settings
+5. Verify database exists and user has permissions
+```
+
+#### JWT Token Issues
+```bash
+# Symptoms
+"Invalid token" errors
+Authentication failures after restart
+
+# Solutions
+1. Check JWT_SECRET in .env (minimum 32 characters):
+   JWT_SECRET=your_super_secret_jwt_key_here_make_it_long_and_random
+
+2. Verify token format in requests:
+   Authorization: Bearer <token>
+
+3. Check token expiration (default 24h):
+   JWT_EXPIRY=24h
+
+4. Generate new secure JWT secret:
+   openssl rand -base64 32
+```
+
+#### Port/Binding Issues
+```bash
+# Symptoms
+"Port already in use" error
+Cannot access API endpoints
+
+# Solutions
+1. Check if port is in use:
+   lsof -i :8080
+   netstat -tulpn | grep 8080
+
+2. Kill process using port:
+   kill -9 <PID>
+
+3. Change port in .env:
+   PORT=8081
+
+4. Check firewall rules:
+   sudo ufw status
+```
+
+### Runtime Issues
+
+#### High Memory Usage
+```bash
+# Symptoms
+Application crashes with OOM
+Slow response times
+
+# Diagnostic Commands
+1. Monitor memory usage:
+   top -p $(pgrep main)
+   
+2. Check Go memory stats:
+   curl http://localhost:8080/metrics | grep go_memstats
+
+3. Profile memory usage:
+   go tool pprof http://localhost:8080/debug/pprof/heap
+
+# Solutions
+1. Optimize database queries
+2. Implement proper connection pooling
+3. Add caching for frequently accessed data
+4. Increase server memory
+```
+
+#### Database Performance Issues
+```bash
+# Symptoms
+Slow API responses
+Database timeout errors
+
+# Diagnostic Commands
+1. Check database connections:
+   curl http://localhost:8080/health/detailed
+
+2. Monitor database performance:
+   SELECT * FROM pg_stat_activity;
+   SELECT * FROM pg_stat_database;
+
+3. Check slow queries:
+   SELECT query, calls, mean_time 
+   FROM pg_stat_statements 
+   ORDER BY mean_time DESC;
+
+# Solutions
+1. Add database indexes
+2. Optimize queries
+3. Increase connection pool size
+4. Upgrade database hardware
+```
+
+#### Rate Limiting Issues
+```bash
+# Symptoms
+429 Too Many Requests errors
+Legitimate users getting blocked
+
+# Solutions
+1. Adjust rate limits in .env:
+   RATE_LIMIT_REQUESTS=200  # Increase limit
+   RATE_LIMIT_AUTH_REQUESTS=20
+
+2. Implement IP whitelisting for trusted sources
+3. Use Redis for distributed rate limiting
+4. Monitor rate limiting metrics:
+   curl http://localhost:8080/metrics | grep rate_limit
+```
+
+### Production Issues
+
+#### SSL Certificate Problems
+```bash
+# Symptoms
+HTTPS errors in production
+SSL handshake failures
+
+# Solutions (for Render)
+1. Check custom domain configuration
+2. Verify DNS settings point to Render
+3. Wait for certificate provisioning (up to 24 hours)
+4. Contact Render support if issues persist
+```
+
+#### Environment Variable Issues
+```bash
+# Symptoms
+Configuration not loading
+Default values being used
+
+# Diagnostic
+1. Check environment variables are set:
+   printenv | grep DATABASE
+
+2. Verify .env file location and syntax
+3. Check for typos in variable names
+
+# Solutions
+1. Restart application after changing .env
+2. Use absolute paths for file references
+3. Validate required variables on startup
+```
+
+### Testing Issues
+
+#### Test Database Setup
+```bash
+# Symptoms
+Tests failing with database errors
+Cannot run test suite
+
+# Solutions
+1. Create separate test database:
+   createdb ecommerce_test
+
+2. Set test environment variables:
+   export DATABASE_NAME=ecommerce_test
+
+3. Run tests with cleanup:
+   go test -v ./...
+
+4. Use transactions in tests for isolation
+```
+
+#### Docker Issues
+```bash
+# Symptoms
+Docker build failures
+Container startup problems
+
+# Solutions
+1. Check Dockerfile syntax
+2. Verify Go version compatibility
+3. Clear Docker cache:
+   docker system prune -f
+
+4. Check container logs:
+   docker logs <container_id>
+
+5. Test build locally:
+   docker build -t ecommerce-api .
+```
+
+### Getting Help
+
+#### Log Analysis
+```bash
+# Enable detailed logging
+export LOG_LEVEL=debug
+export LOG_FORMAT=json
+
+# Check application logs
+tail -f app.log | jq '.'
+
+# Filter error logs
+grep "ERROR" app.log | jq '.'
+```
+
+#### Health Check Diagnostics
+```bash
+# Basic health check
+curl http://localhost:8080/health
+
+# Detailed system information
+curl http://localhost:8080/health/detailed | jq '.'
+
+# Check specific service status
+curl http://localhost:8080/ready
+curl http://localhost:8080/live
+```
+
+#### Performance Profiling
+```bash
+# CPU profiling
+go tool pprof http://localhost:8080/debug/pprof/profile
+
+# Memory profiling
+go tool pprof http://localhost:8080/debug/pprof/heap
+
+# Goroutine analysis
+go tool pprof http://localhost:8080/debug/pprof/goroutine
+```
+
+### Support Resources
+
+- **GitHub Issues**: [Repository Issues](https://github.com/geoo115/Ecommerce-api/issues)
+- **Documentation**: Check README.md and API documentation
+- **Community**: Stack Overflow with `go` and `gin-gonic` tags
+- **Render Support**: [render.com/support](https://render.com/support) for deployment issues
+
 ## Testing with Postman
 
 ### Quick Setup:
@@ -1471,3 +1916,77 @@ go test -bench=. ./...
 - **Security**: No security vulnerabilities introduced?
 - **Maintainability**: Clean, readable, well-documented code?
 - **Standards**: Follows project conventions and Go best practices?
+
+## 🚀 Deployment
+
+### Production Deployment on Render
+
+The API is configured for easy deployment on Render cloud platform with automatic CI/CD.
+
+#### Quick Deploy
+1. **Fork this repository** to your GitHub account
+2. **Sign up** at [render.com](https://render.com)
+3. **Create New Blueprint** and connect your forked repository
+4. **Set JWT Secret** in environment variables (minimum 32 characters)
+5. **Deploy** - Render will automatically create database and deploy your app
+
+#### Automatic Deployment Features
+- ✅ **Auto-deploy** on code changes (main branch → production, develop → staging)
+- ✅ **PostgreSQL database** automatically provisioned and connected
+- ✅ **Redis caching** (optional) for improved performance
+- ✅ **Health checks** configured for monitoring
+- ✅ **SSL certificates** automatically provisioned
+- ✅ **Environment variables** securely managed
+
+#### GitHub Actions CI/CD
+- **Continuous Integration**: Automated testing on every push/PR
+- **Continuous Deployment**: Auto-deploy to Render on successful builds
+- **Performance Testing**: Load testing and benchmarking
+- **Security Scanning**: Automated vulnerability checks
+
+#### Environment Configuration
+```bash
+# Production Environment Variables (set in Render dashboard)
+ENV=production
+JWT_SECRET=your_super_secure_jwt_secret_here_minimum_32_characters
+DATABASE_SSLMODE=require
+RATE_LIMIT_ENABLED=true
+LOG_LEVEL=info
+```
+
+For detailed deployment instructions, see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+### Alternative Deployment Options
+
+#### Docker
+```bash
+# Build image
+docker build -t ecommerce-api .
+
+# Run container
+docker run -p 8080:8080 --env-file .env ecommerce-api
+```
+
+#### Traditional VPS
+```bash
+# Build binary
+go build -o ecommerce-api main.go
+
+# Run with systemd service
+sudo systemctl enable ecommerce-api
+sudo systemctl start ecommerce-api
+```
+
+## 📊 Production Monitoring
+
+### Built-in Monitoring
+- **Health Endpoints**: `/health`, `/health/detailed`, `/ready`, `/live`
+- **Metrics Endpoint**: `/metrics` (Prometheus-compatible)
+- **Performance Tracking**: Response times, throughput, error rates
+- **Resource Monitoring**: CPU, memory, database connections
+
+### Recommended Monitoring Stack
+- **Grafana**: Dashboards and visualization
+- **Prometheus**: Metrics collection
+- **AlertManager**: Alerting and notifications
+- **Sentry**: Error tracking and performance monitoring
