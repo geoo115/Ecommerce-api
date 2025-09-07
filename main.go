@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/geoo115/Ecommerce/api"
 	"github.com/geoo115/Ecommerce/api/middlewares"
@@ -38,12 +39,33 @@ func main() {
 	r.Use(middlewares.ErrorLoggingMiddleware())
 	r.Use(middlewares.GeneralRateLimit())
 
-	// Initialize database
+	// Initialize database with graceful degradation
 	utils.Info("Connecting to database...")
 	if err := db.ConnectDatabase(); err != nil {
-		utils.Fatal("Failed to connect to database: %v", err)
+		utils.Error("Initial database connection failed: %v", err)
+		utils.Info("Starting server without database - will retry connections in background")
+
+		// Start background database reconnection attempts
+		go func() {
+			retryInterval := 30 * time.Second
+			for {
+				time.Sleep(retryInterval)
+				utils.Info("Attempting database reconnection...")
+				if err := db.ConnectDatabase(); err == nil {
+					utils.Info("Database reconnected successfully!")
+					break
+				} else {
+					utils.Error("Database reconnection failed: %v", err)
+					// Increase retry interval, max 5 minutes
+					if retryInterval < 5*time.Minute {
+						retryInterval += 30 * time.Second
+					}
+				}
+			}
+		}()
+	} else {
+		utils.Info("Database connected successfully")
 	}
-	utils.Info("Database connected successfully")
 
 	// Set up routes
 	utils.Info("Setting up routes...")
