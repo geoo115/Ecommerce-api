@@ -19,6 +19,17 @@ import (
 var DB *gorm.DB
 
 func createDatabaseIfNotExists(dsn string) error {
+	// Skip database creation for managed services
+	// Look for indicators of managed database services
+	if strings.Contains(dsn, "render.com") ||
+		strings.Contains(dsn, "amazonaws.com") ||
+		strings.Contains(dsn, "railway.app") ||
+		strings.Contains(dsn, "planetscale.com") ||
+		strings.Contains(dsn, "sslmode=require") {
+		log.Printf("Detected managed database service, skipping database creation check")
+		return nil
+	}
+
 	// Parse the DSN to extract components
 	u, err := url.Parse(dsn)
 	if err != nil {
@@ -42,7 +53,7 @@ func createDatabaseIfNotExists(dsn string) error {
 	u.RawQuery = q.Encode()
 	u.Path = "/postgres" // Use the "postgres" system database for initial connection
 
-	// Add sslmode=disable if not present
+	// Only set sslmode=disable if not already specified and not a managed service
 	if _, ok := q["sslmode"]; !ok {
 		q.Set("sslmode", "disable")
 		u.RawQuery = q.Encode()
@@ -86,6 +97,20 @@ func ConnectDatabase() error {
 		return fmt.Errorf("failed to get database URL: %w", err)
 	}
 
+	// Log connection attempt (but mask sensitive details)
+	maskedDSN := dsn
+	if strings.Contains(dsn, "://") {
+		parts := strings.Split(dsn, "://")
+		if len(parts) == 2 {
+			// Extract just the host part for logging
+			hostPart := strings.Split(parts[1], "@")
+			if len(hostPart) > 1 {
+				maskedDSN = parts[0] + "://*****@" + hostPart[len(hostPart)-1]
+			}
+		}
+	}
+	log.Printf("Attempting to connect to database: %s", maskedDSN)
+
 	// If the DSN looks like Postgres, attempt to ensure database exists
 	if strings.HasPrefix(dsn, "postgres://") || strings.Contains(dsn, "host=") {
 		if err := createDatabaseIfNotExists(dsn); err != nil {
@@ -102,11 +127,13 @@ func ConnectDatabase() error {
 		dialector = sqlite.Open(dsn)
 	}
 
+	log.Printf("Opening database connection...")
 	database, err := gorm.Open(dialector, &gorm.Config{})
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	log.Printf("Database connection successful, running auto-migration...")
 	// Auto-migrate the models
 	if err := database.AutoMigrate(
 		&models.User{},
