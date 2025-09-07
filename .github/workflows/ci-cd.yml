@@ -1,15 +1,14 @@
-name: CI/CD Pipeline with Load Testing
+name: CI/CD Pipeline with Load Testing (Render) - DISABLED
+
+# This workflow is disabled in favor of Railway deployment
+# See .github/workflows/railway-ci-cd.yml for the active workflow
 
 concurrency:
   group: ci-${{ github.ref_name }}
   cancel-in-progress: false
 
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-  workflow_dispatch:
+  workflow_dispatch:  # Only manual triggers allowed
     inputs:
       test_type:
         description: 'Load test type to run'

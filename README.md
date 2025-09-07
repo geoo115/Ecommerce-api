@@ -1919,42 +1919,54 @@ go test -bench=. ./...
 
 ## 🚀 Deployment
 
-### Production Deployment on Render
+### Production Deployment on Railway
 
-The API is configured for easy deployment on Render cloud platform with automatic CI/CD.
+The API is configured for easy deployment on Railway cloud platform with automatic CI/CD and superior cold start handling.
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/go-api)
 
 #### Quick Deploy
 1. **Fork this repository** to your GitHub account
-2. **Sign up** at [render.com](https://render.com)
-3. **Create New Blueprint** and connect your forked repository
-4. **Set JWT Secret** in environment variables (minimum 32 characters)
-5. **Deploy** - Render will automatically create database and deploy your app
+2. **Sign up** at [railway.app](https://railway.app)  
+3. **Click "New Project"** → "Deploy from GitHub repo"
+4. **Select your repository** - Railway auto-detects Go projects
+5. **Add PostgreSQL** - Click "New" → "Database" → "Add PostgreSQL"
+6. **Set JWT Secret** in environment variables (minimum 32 characters)
+7. **Deploy** - Railway automatically builds and deploys your app
+
+#### Railway Advantages over Render
+- ✅ **Better Cold Start** - Minimal cold start delays compared to Render
+- ✅ **More Reliable** - Better uptime and performance consistency
+- ✅ **Predictable Pricing** - $5/month per service vs Render's variable pricing
+- ✅ **Auto-scale** - Better resource management and scaling
+- ✅ **Faster Builds** - Quicker deployment times with Nixpacks
 
 #### Automatic Deployment Features
 - ✅ **Auto-deploy** on code changes (main branch → production, develop → staging)
 - ✅ **PostgreSQL database** automatically provisioned and connected
 - ✅ **Redis caching** (optional) for improved performance
-- ✅ **Health checks** configured for monitoring
+- ✅ **Health checks** configured for monitoring (`/health` endpoint)
 - ✅ **SSL certificates** automatically provisioned
 - ✅ **Environment variables** securely managed
+- ✅ **Keep-warm support** with automatic health pings every 10 minutes
 
 #### GitHub Actions CI/CD
 - **Continuous Integration**: Automated testing on every push/PR
-- **Continuous Deployment**: Auto-deploy to Render on successful builds
+- **Continuous Deployment**: Auto-deploy to Railway on successful builds
 - **Performance Testing**: Load testing and benchmarking
-- **Security Scanning**: Automated vulnerability checks
+- **Keep-Warm**: Automated health pings to prevent cold starts
 
 #### Environment Configuration
 ```bash
-# Production Environment Variables (set in Render dashboard)
-ENV=production
+# Production Environment Variables (set in Railway dashboard)
+DATABASE_URL=postgresql://username:password@host:port/database  # Auto-set by Railway
 JWT_SECRET=your_super_secure_jwt_secret_here_minimum_32_characters
-DATABASE_SSLMODE=require
+PORT=8080
+GIN_MODE=release
 RATE_LIMIT_ENABLED=true
-LOG_LEVEL=info
 ```
 
-For detailed deployment instructions, see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+For detailed Railway deployment instructions, see [`RAILWAY_DEPLOY.md`](RAILWAY_DEPLOY.md).
 
 ### Alternative Deployment Options
 

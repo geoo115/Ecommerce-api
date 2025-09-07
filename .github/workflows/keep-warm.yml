@@ -1,0 +1,32 @@
+name: Keep Railway Service Warm
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent cold starts
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allow manual triggers
+
+jobs:
+  keep-warm:
+    name: Ping Railway Service
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Ping health endpoint
+      run: |
+        HEALTH_URL="${{ secrets.RAILWAY_PRODUCTION_URL }}/health"
+        
+        echo "🔥 Pinging Railway service to prevent cold start..."
+        echo "URL: $HEALTH_URL"
+        
+        # Ping the health endpoint
+        if curl -f -s --max-time 30 "$HEALTH_URL"; then
+          echo "✅ Keep-warm ping successful"
+        else
+          echo "⚠️  Keep-warm ping failed, but this is not critical"
+          exit 0  # Don't fail the workflow
+        fi
+
+    - name: Log timestamp
+      run: |
+        echo "🕒 Keep-warm completed at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
