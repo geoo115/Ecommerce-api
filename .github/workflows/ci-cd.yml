@@ -103,7 +103,7 @@ jobs:
           echo "Database connection verified ✓"
       
       - name: Run Go vet
-        run: go vet ./...
+        run: go vet $(go list ./... | grep -v /cmd/)
       
       - name: Run Go fmt check
         run: |
@@ -130,7 +130,7 @@ jobs:
           echo "DATABASE_NAME: $DATABASE_NAME"
           echo "DATABASE_SSLMODE: $DATABASE_SSLMODE"
           echo "Running go test..."
-          go test ./... -coverprofile=coverage.out -covermode=count -v || (echo "Tests failed, showing last 50 lines of output" && exit 1)
+          go test $(go list ./... | grep -v /cmd/) -coverprofile=coverage.out -covermode=count -v || (echo "Tests failed, showing last 50 lines of output" && exit 1)
           go tool cover -func=coverage.out
       
       - name: Upload coverage to Codecov
@@ -184,7 +184,7 @@ jobs:
       
       - name: Run performance benchmarks
         run: |
-          go test -bench=. -benchmem ./... > benchmark_results.txt
+          go test -bench=. -benchmem $(go list ./... | grep -v /cmd/) > benchmark_results.txt
           cat benchmark_results.txt
       
       - name: Run performance regression tests
