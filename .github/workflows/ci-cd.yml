@@ -363,8 +363,9 @@ jobs:
           push: ${{ github.ref == 'refs/heads/main' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Docker cache temporarily disabled due to corruption
+          # cache-from: type=gha
+          # cache-to: type=gha,mode=max
       
       - name: Generate artifact attestation
         if: github.ref == 'refs/heads/main'
