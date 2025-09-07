@@ -148,25 +148,25 @@ func ConnectDatabase() error {
 			if strings.Contains(dsn, "?") {
 				separator = "&"
 			}
-			dsn += separator + "connect_timeout=30"  // Increased for Render
+			dsn += separator + "connect_timeout=30" // Increased for Render
 		}
 		if !strings.Contains(dsn, "statement_timeout=") {
 			dsn += "&statement_timeout=60000" // 60 seconds for Render
 		}
 		// Add additional Render-specific parameters
 		if !strings.Contains(dsn, "pool_max_conns=") {
-			dsn += "&pool_max_conns=10"  // Limit connections for free tier
+			dsn += "&pool_max_conns=10" // Limit connections for free tier
 		}
 		if !strings.Contains(dsn, "pool_timeout=") {
-			dsn += "&pool_timeout=30"    // Pool acquisition timeout
+			dsn += "&pool_timeout=30" // Pool acquisition timeout
 		}
 		dialector = postgres.Open(dsn)
 	}
 
 	// Retry connection with exponential backoff - increased for Render
 	var database *gorm.DB
-	maxRetries := 8  // Increased from 5 for Render reliability
-	baseDelay := 3 * time.Second  // Increased base delay
+	maxRetries := 8              // Increased from 5 for Render reliability
+	baseDelay := 3 * time.Second // Increased base delay
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		log.Printf("Database connection attempt %d/%d...", attempt, maxRetries)
@@ -179,7 +179,7 @@ func ConnectDatabase() error {
 				// Set a context with timeout for the ping
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				
+
 				if pingErr := sqlDB.PingContext(ctx); pingErr == nil {
 					log.Printf("Database connection and ping successful after %d attempt(s)", attempt)
 					break
