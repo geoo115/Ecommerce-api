@@ -53,6 +53,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false
       
       # Cache temporarily disabled due to corruption
       # - name: Cache Go modules
@@ -187,6 +188,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false
       
       # Cache temporarily disabled due to corruption
       # - name: Cache Go modules
@@ -242,6 +244,7 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version: ${{ env.GO_VERSION }}
+          cache: false
       
       - name: Set up Node.js for k6
         uses: actions/setup-node@v4
