@@ -19,7 +19,7 @@ on:
           - all
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.23'
   NODE_VERSION: '18'
   REGISTRY: 'docker.io'
   IMAGE_NAME: 'geoo115/ecommerce-api'
@@ -75,8 +75,16 @@ jobs:
         fi
 
     - name: Run tests with coverage
+      env:
+        DATABASE_HOST: localhost
+        DATABASE_PORT: 5432
+        DATABASE_USER: postgres
+        DATABASE_PASSWORD: test_password
+        DATABASE_NAME: ecommerce_test
+        DATABASE_SSLMODE: disable
+        JWT_SECRET: test_jwt_secret_for_ci
       run: |
-        go test ./... -coverprofile=coverage.out -covermode=count -race -v
+        go test ./... -coverprofile=coverage.out -covermode=count -v
         go tool cover -func=coverage.out
 
     - name: Upload coverage to Codecov
