@@ -203,7 +203,7 @@ func ConnectDatabase() error {
 
 		if attempt < maxRetries {
 			delay := time.Duration(attempt) * baseDelay
-			
+
 			// Special handling for "unexpected EOF" which is common with Render cold starts
 			errorMsg := err.Error()
 			if strings.Contains(errorMsg, "unexpected EOF") {
@@ -221,10 +221,10 @@ func ConnectDatabase() error {
 	sqlDB, err := database.DB()
 	if err == nil {
 		// Conservative pool settings for Render free tier
-		sqlDB.SetMaxIdleConns(2)                    // Reduced from 10
-		sqlDB.SetMaxOpenConns(5)                     // Reduced from 100 
-		sqlDB.SetConnMaxLifetime(30 * time.Minute)   // Shorter lifetime
-		sqlDB.SetConnMaxIdleTime(5 * time.Minute)    // Shorter idle time
+		sqlDB.SetMaxIdleConns(2)                   // Reduced from 10
+		sqlDB.SetMaxOpenConns(5)                   // Reduced from 100
+		sqlDB.SetConnMaxLifetime(30 * time.Minute) // Shorter lifetime
+		sqlDB.SetConnMaxIdleTime(5 * time.Minute)  // Shorter idle time
 		log.Printf("Connection pool configured successfully")
 	}
 
