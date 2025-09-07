@@ -140,7 +140,7 @@ func ConnectDatabase() error {
 		},
 	}
 
-	// Add connection timeout for PostgreSQL with Render-specific optimizations
+	// Add connection timeout for PostgreSQL with enhanced Render optimizations
 	if strings.HasPrefix(dsn, "postgres://") || strings.Contains(dsn, "host=") {
 		// Parse the DSN and add timeout parameters if not already present
 		if !strings.Contains(dsn, "connect_timeout=") {
@@ -148,36 +148,46 @@ func ConnectDatabase() error {
 			if strings.Contains(dsn, "?") {
 				separator = "&"
 			}
-			dsn += separator + "connect_timeout=30" // Increased for Render
+			dsn += separator + "connect_timeout=60" // Increased for Render cold starts
 		}
 		if !strings.Contains(dsn, "statement_timeout=") {
-			dsn += "&statement_timeout=60000" // 60 seconds for Render
+			dsn += "&statement_timeout=120000" // 2 minutes for Render stability
 		}
-		// Add additional Render-specific parameters
+		// Add additional Render-specific parameters for connection reliability
 		if !strings.Contains(dsn, "pool_max_conns=") {
-			dsn += "&pool_max_conns=10" // Limit connections for free tier
+			dsn += "&pool_max_conns=5" // Reduced for Render free tier stability
 		}
 		if !strings.Contains(dsn, "pool_timeout=") {
-			dsn += "&pool_timeout=30" // Pool acquisition timeout
+			dsn += "&pool_timeout=60" // Increased pool timeout
+		}
+		// Add keepalive settings for Render
+		if !strings.Contains(dsn, "tcp_keepalives_idle=") {
+			dsn += "&tcp_keepalives_idle=600" // 10 minutes
+		}
+		if !strings.Contains(dsn, "tcp_keepalives_interval=") {
+			dsn += "&tcp_keepalives_interval=30" // 30 seconds
+		}
+		if !strings.Contains(dsn, "tcp_keepalives_count=") {
+			dsn += "&tcp_keepalives_count=3" // 3 probes
 		}
 		dialector = postgres.Open(dsn)
 	}
 
-	// Retry connection with exponential backoff - increased for Render
+	// Retry connection with exponential backoff - optimized for Render
 	var database *gorm.DB
-	maxRetries := 8              // Increased from 5 for Render reliability
-	baseDelay := 3 * time.Second // Increased base delay
+	maxRetries := 12             // Increased for Render cold starts
+	baseDelay := 5 * time.Second // Longer base delay for stability
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		log.Printf("Database connection attempt %d/%d...", attempt, maxRetries)
 
 		database, err = gorm.Open(dialector, gormConfig)
 		if err == nil {
-			// Test the connection with timeout
+			// Test the connection with extended timeout for Render
 			sqlDB, sqlErr := database.DB()
 			if sqlErr == nil {
-				// Set a context with timeout for the ping
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				// Set a longer timeout for Render's managed database
+				ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 				defer cancel()
 
 				if pingErr := sqlDB.PingContext(ctx); pingErr == nil {
@@ -193,21 +203,28 @@ func ConnectDatabase() error {
 
 		if attempt < maxRetries {
 			delay := time.Duration(attempt) * baseDelay
-			log.Printf("Connection failed (attempt %d/%d): %v. Retrying in %v...", attempt, maxRetries, err, delay)
+			
+			// Special handling for "unexpected EOF" which is common with Render cold starts
+			errorMsg := err.Error()
+			if strings.Contains(errorMsg, "unexpected EOF") {
+				log.Printf("Render database cold start detected (attempt %d/%d). Waiting %v for warm-up...", attempt, maxRetries, delay)
+			} else {
+				log.Printf("Connection failed (attempt %d/%d): %v. Retrying in %v...", attempt, maxRetries, err, delay)
+			}
 			time.Sleep(delay)
 		} else {
 			return fmt.Errorf("failed to connect to database after %d attempts: %w", maxRetries, err)
 		}
 	}
 
-	// Configure connection pool for better reliability
+	// Configure connection pool for Render's managed PostgreSQL
 	sqlDB, err := database.DB()
 	if err == nil {
-		// Set connection pool settings for production
-		sqlDB.SetMaxIdleConns(10)
-		sqlDB.SetMaxOpenConns(100)
-		sqlDB.SetConnMaxLifetime(time.Hour)
-		sqlDB.SetConnMaxIdleTime(10 * time.Minute)
+		// Conservative pool settings for Render free tier
+		sqlDB.SetMaxIdleConns(2)                    // Reduced from 10
+		sqlDB.SetMaxOpenConns(5)                     // Reduced from 100 
+		sqlDB.SetConnMaxLifetime(30 * time.Minute)   // Shorter lifetime
+		sqlDB.SetConnMaxIdleTime(5 * time.Minute)    // Shorter idle time
 		log.Printf("Connection pool configured successfully")
 	}
 
