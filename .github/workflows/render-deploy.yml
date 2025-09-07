@@ -1,11 +1,8 @@
-name: Simple CI/CD for Render
+name: Simple CI/CD for Render (Disabled - Using ci-cd.yml instead)
 
+# Temporarily disabled to prevent conflicts with main CI/CD pipeline
 on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
-  workflow_dispatch:
+  workflow_dispatch:  # Only manual triggers allowed
 
 env:
   GO_VERSION: '1.22'

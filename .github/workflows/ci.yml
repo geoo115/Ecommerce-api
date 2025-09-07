@@ -1,10 +1,8 @@
-name: CI
+name: CI (Disabled - Using ci-cd.yml instead)
 
+# Temporarily disabled to prevent conflicts with main CI/CD pipeline
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  workflow_dispatch:  # Only manual triggers allowed
 
 jobs:
   test:
