@@ -8,8 +8,11 @@ import (
 )
 
 func LoadConfig() error {
+	// In production, .env file may not exist - this is fine
+	// Environment variables should be set directly by the hosting platform
 	if err := godotenv.Load(); err != nil {
-		return fmt.Errorf("error loading .env file: %w", err)
+		// Only log the error, don't fail - production environments don't need .env files
+		fmt.Printf("Note: .env file not found, using environment variables directly: %v\n", err)
 	}
 	return nil
 }
