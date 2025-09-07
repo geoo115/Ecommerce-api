@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -139,7 +140,7 @@ func ConnectDatabase() error {
 		},
 	}
 
-	// Add connection timeout for PostgreSQL
+	// Add connection timeout for PostgreSQL with Render-specific optimizations
 	if strings.HasPrefix(dsn, "postgres://") || strings.Contains(dsn, "host=") {
 		// Parse the DSN and add timeout parameters if not already present
 		if !strings.Contains(dsn, "connect_timeout=") {
@@ -147,35 +148,46 @@ func ConnectDatabase() error {
 			if strings.Contains(dsn, "?") {
 				separator = "&"
 			}
-			dsn += separator + "connect_timeout=10"
+			dsn += separator + "connect_timeout=30"  // Increased for Render
 		}
 		if !strings.Contains(dsn, "statement_timeout=") {
-			dsn += "&statement_timeout=30000" // 30 seconds
+			dsn += "&statement_timeout=60000" // 60 seconds for Render
+		}
+		// Add additional Render-specific parameters
+		if !strings.Contains(dsn, "pool_max_conns=") {
+			dsn += "&pool_max_conns=10"  // Limit connections for free tier
+		}
+		if !strings.Contains(dsn, "pool_timeout=") {
+			dsn += "&pool_timeout=30"    // Pool acquisition timeout
 		}
 		dialector = postgres.Open(dsn)
 	}
 
-	// Retry connection with exponential backoff
+	// Retry connection with exponential backoff - increased for Render
 	var database *gorm.DB
-	maxRetries := 5
-	baseDelay := 2 * time.Second
+	maxRetries := 8  // Increased from 5 for Render reliability
+	baseDelay := 3 * time.Second  // Increased base delay
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		log.Printf("Database connection attempt %d/%d...", attempt, maxRetries)
 
 		database, err = gorm.Open(dialector, gormConfig)
 		if err == nil {
-			// Test the connection
+			// Test the connection with timeout
 			sqlDB, sqlErr := database.DB()
 			if sqlErr == nil {
-				if pingErr := sqlDB.Ping(); pingErr == nil {
-					log.Printf("Database connection successful after %d attempt(s)", attempt)
+				// Set a context with timeout for the ping
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				
+				if pingErr := sqlDB.PingContext(ctx); pingErr == nil {
+					log.Printf("Database connection and ping successful after %d attempt(s)", attempt)
 					break
 				} else {
-					err = pingErr
+					err = fmt.Errorf("ping failed: %w", pingErr)
 				}
 			} else {
-				err = sqlErr
+				err = fmt.Errorf("failed to get sql.DB: %w", sqlErr)
 			}
 		}
 
