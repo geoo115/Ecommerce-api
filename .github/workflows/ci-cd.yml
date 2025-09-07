@@ -23,7 +23,7 @@ on:
           - all
 
 env:
-  GO_VERSION: '1.23'
+  GO_VERSION: '1.23.0'
   NODE_VERSION: '18'
   REGISTRY: 'docker.io'
   IMAGE_NAME: 'geoo115/ecommerce-api'
@@ -94,6 +94,14 @@ jobs:
       - name: Download dependencies
         run: go mod download
       
+      - name: Verify database connection
+        env:
+          PGPASSWORD: test_password
+        run: |
+          echo "Testing database connection..."
+          psql -h localhost -p 5432 -U postgres -d ecommerce_test -c "SELECT version();"
+          echo "Database connection verified ✓"
+      
       - name: Run Go vet
         run: go vet ./...
       
@@ -115,7 +123,14 @@ jobs:
           DATABASE_SSLMODE: disable
           JWT_SECRET: test_jwt_secret_for_ci
         run: |
-          go test ./... -coverprofile=coverage.out -covermode=count -v
+          echo "Starting tests with environment:"
+          echo "DATABASE_HOST: $DATABASE_HOST"
+          echo "DATABASE_PORT: $DATABASE_PORT" 
+          echo "DATABASE_USER: $DATABASE_USER"
+          echo "DATABASE_NAME: $DATABASE_NAME"
+          echo "DATABASE_SSLMODE: $DATABASE_SSLMODE"
+          echo "Running go test..."
+          go test ./... -coverprofile=coverage.out -covermode=count -v || (echo "Tests failed, showing last 50 lines of output" && exit 1)
           go tool cover -func=coverage.out
       
       - name: Upload coverage to Codecov
